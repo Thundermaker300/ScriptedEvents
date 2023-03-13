@@ -596,6 +596,7 @@ namespace ScriptedEvents.API.Helpers
             scr.DebugLog("-----------");
             MainPlugin.Info($"Finished running script {scr.ScriptName}.");
             scr.IsRunning = false;
+            scr.Jump(0);
 
             if (MainPlugin.Singleton.Config.LoopScripts.Contains(scr.ScriptName))
             {
