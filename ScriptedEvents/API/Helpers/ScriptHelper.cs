@@ -225,7 +225,7 @@ namespace ScriptedEvents.API.Helpers
                     script.Cached = true;
                     script.CacheTime = DateTime.UtcNow;
 
-                    ScriptCache.Add(script.ScriptName, script);
+                    ScriptCache[script.ScriptName] = script;
                     Log.Debug($"Added {script.ScriptName} to script cache.");
                 }
             }
@@ -600,7 +600,7 @@ namespace ScriptedEvents.API.Helpers
                 ReadAndRun(scr.ScriptName, scr.Sender); // so that it re-reads the content of the text file.
             }
 
-            scr.DebugLog("Removing script from running scripts.");
+            Log.Debug($"Removing script '{scr.ScriptName}' from running scripts.");
             RunningScripts.Remove(scr);
 
             scr.Dispose();
