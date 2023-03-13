@@ -30,6 +30,12 @@
         [Description("The string to use for countdowns.")]
         public string CountdownString { get; set; } = "<size=26><color=#5EB3FF><b>{TEXT}</b></color></size>\\n{TIME}";
 
+        [Description("Whether or not to store read scripts temporarily to save memory.")]
+        public bool Caching { get; set; } = true;
+
+        [Description("Amount of time in seconds to store scripts.")]
+        public int CacheDuration { get; set; } = 1000;
+
         // todo: un-alias door commands, because they dont have duration anymore
         [Description("Define a custom set of actions and the action they run when used.")]
         public List<Alias> Aliases { get; set; } = new()

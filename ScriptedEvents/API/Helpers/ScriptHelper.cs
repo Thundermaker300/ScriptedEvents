@@ -38,6 +38,11 @@ namespace ScriptedEvents.API.Helpers
         public static Dictionary<string, Type> ActionTypes { get; } = new();
 
         /// <summary>
+        /// Gets a dictionary of script caches.
+        /// </summary>
+        public static Dictionary<string, Script> ScriptCache { get; } = new();
+
+        /// <summary>
         /// Gets a dictionary of <see cref="Script"/> that are currently running, and the <see cref="CoroutineHandle"/> that is running them.
         /// </summary>
         public static Dictionary<Script, CoroutineHandle> RunningScripts { get; } = new();
@@ -74,6 +79,26 @@ namespace ScriptedEvents.API.Helpers
         /// <exception cref="FileNotFoundException">Thrown if the script is not found.</exception>
         public static Script ReadScript(string scriptName, ICommandSender executor, bool suppressWarnings = false)
         {
+            if (ScriptCache.TryGetValue(scriptName, out Script scr) && scr is not null)
+            {
+                if (executor is null)
+                {
+                    scr.Context = ExecuteContext.Automatic;
+                }
+                else if (executor is ServerConsoleSender console)
+                {
+                    scr.Context = ExecuteContext.ServerConsole;
+                    scr.Sender = console;
+                }
+                else if (executor is PlayerCommandSender player)
+                {
+                    scr.Context = ExecuteContext.RemoteAdmin;
+                    scr.Sender = player;
+                }
+
+                return scr;
+            }
+
             string allText = ReadScriptText(scriptName);
             Script script = new();
 
@@ -192,6 +217,18 @@ namespace ScriptedEvents.API.Helpers
             }
 
             script.DebugLog($"Debug script read successfully. Name: {script.ScriptName} | Actions: {string.Join(" ", script.Actions.Length)} | Flags: {string.Join(" ", script.Flags)} | Labels: {string.Join(" ", script.Labels)} | Comments: {script.Actions.Where(action => action is NullAction @null && @null.Type is "COMMENT").Count()}");
+
+            if (MainPlugin.Configs.Caching && MainPlugin.Configs.CacheDuration > 0)
+            {
+                if (!ScriptCache.ContainsKey(script.ScriptName) || (ScriptCache[script.ScriptName] is not null && (DateTime.UtcNow - ScriptCache[script.ScriptName].CacheTime).TotalSeconds > MainPlugin.Configs.CacheDuration))
+                {
+                    script.Cached = true;
+                    script.CacheTime = DateTime.UtcNow;
+
+                    ScriptCache.Add(script.ScriptName, script);
+                    Log.Debug($"Added {script.ScriptName} to script cache.");
+                }
+            }
 
             return script;
         }

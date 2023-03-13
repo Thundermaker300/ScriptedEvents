@@ -139,8 +139,24 @@
         /// </summary>
         public ICommandSender Sender { get; internal set; }
 
+        /// <summary>
+        /// Gets a value indicating whether or not the script is cached.
+        /// </summary>
+        public bool Cached { get; internal set; } = false;
+
+        /// <summary>
+        /// Gets the <see cref="DateTime"/> that the script was cached.
+        /// </summary>
+        public DateTime CacheTime { get; internal set; }
+
+        /// <summary>
+        /// Gets or sets a <see cref="Dictionary{TKey, TValue}"/> of script-specific variables.
+        /// </summary>
         public Dictionary<string, CustomVariable> UniqueVariables { get; set; }
 
+        /// <summary>
+        /// Gets or sets a <see cref="Dictionary{TKey, TValue}"/> of script-specific player variables.
+        /// </summary>
         public Dictionary<string, CustomPlayerVariable> UniquePlayerVariables { get; set; }
 
         /// <inheritdoc/>
