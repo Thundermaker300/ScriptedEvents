@@ -41,12 +41,12 @@
             int i = 0;
             foreach (var scriptPair in ScriptHelper.RunningScripts)
             {
-                if (!scriptPair.Key.IsRunning)
+                if (!scriptPair.Script.IsRunning)
                     continue;
 
                 i++;
 
-                Script script = scriptPair.Key;
+                Script script = scriptPair.Script;
                 bldr.AppendLine($"[{i}] {script.ScriptName} | Executed by: {script.Sender?.LogName ?? "Automatic"} | {script.RunDate:g}");
             }
 

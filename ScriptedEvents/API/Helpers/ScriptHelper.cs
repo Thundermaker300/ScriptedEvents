@@ -20,6 +20,7 @@ namespace ScriptedEvents.API.Helpers
     using ScriptedEvents.API.Features.Exceptions;
     using ScriptedEvents.Structures;
     using ScriptedEvents.Variables.Handlers;
+    using UnityEngine;
     using Random = UnityEngine.Random;
 
     /// <summary>
@@ -45,7 +46,7 @@ namespace ScriptedEvents.API.Helpers
         /// <summary>
         /// Gets a dictionary of <see cref="Script"/> that are currently running, and the <see cref="CoroutineHandle"/> that is running them.
         /// </summary>
-        public static Dictionary<Script, CoroutineHandle> RunningScripts { get; } = new();
+        public static List<ScriptExecution> RunningScripts { get; } = new();
 
         public static Dictionary<string, CustomAction> CustomActions { get; } = new();
 
@@ -243,8 +244,10 @@ namespace ScriptedEvents.API.Helpers
             if (scr.Disabled)
                 throw new DisabledScriptException(scr.ScriptName);
 
-            CoroutineHandle handle = Timing.RunCoroutine(RunScriptInternal(scr), $"SCRIPT_{scr.UniqueId}");
-            RunningScripts.Add(scr, handle);
+            int runId = UnityEngine.Random.Range(1000, 9999);
+
+            CoroutineHandle handle = Timing.RunCoroutine(RunScriptInternal(scr, runId), $"SCRIPT_{scr.UniqueId}");
+            RunningScripts.Add(new(scr, handle, runId));
         }
 
         /// <summary>
@@ -370,13 +373,13 @@ namespace ScriptedEvents.API.Helpers
         public static int StopAllScripts()
         {
             int amount = 0;
-            foreach (KeyValuePair<Script, CoroutineHandle> kvp in RunningScripts)
+            foreach (ScriptExecution kvp in RunningScripts)
             {
                 amount++;
-                Timing.KillCoroutines(kvp.Value);
+                Timing.KillCoroutines(kvp.Handle);
 
-                kvp.Key.IsRunning = false;
-                kvp.Key.Dispose();
+                kvp.Script.IsRunning = false;
+                kvp.Script.Dispose();
             }
 
             foreach (string key in WaitUntilAction.Coroutines)
@@ -465,7 +468,7 @@ namespace ScriptedEvents.API.Helpers
         /// </summary>
         /// <param name="scr">The script to run.</param>
         /// <returns>Coroutine iterator.</returns>
-        private static IEnumerator<float> RunScriptInternal(Script scr)
+        private static IEnumerator<float> RunScriptInternal(Script scr, int runId)
         {
             MainPlugin.Info($"Running script {scr.ScriptName}.");
 
@@ -601,7 +604,7 @@ namespace ScriptedEvents.API.Helpers
             }
 
             Log.Debug($"Removing script '{scr.ScriptName}' from running scripts.");
-            RunningScripts.Remove(scr);
+            RunningScripts.RemoveAll(exec => exec.RunId == runId);
 
             scr.Dispose();
         }
