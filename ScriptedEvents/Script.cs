@@ -194,6 +194,11 @@
         /// </summary>
         public Dictionary<IAction, string[]> OriginalActionArgs { get; set; } = new();
 
+        /// <summary>
+        /// Gets or sets an array of arguments and their types for a specific action.
+        /// </summary>
+        public Dictionary<IAction, (ParamType Type, string Value)[]> OriginalActionArgsWithTypes { get; set; } = new();
+
         /// <inheritdoc/>
         public void Dispose()
         {
