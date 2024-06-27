@@ -233,57 +233,73 @@ namespace ScriptedEvents.API.Modules
 
             List<IAction> actionList = ListPool<IAction>.Pool.Get();
 
-            Action<IAction> addActionNoArgs = (action) =>
+            string[] lines = allText.Split('\n');
+            for (int currentline = 0; currentline < lines.Length; currentline++)
             {
-                script.OriginalActionArgs[action] = Array.Empty<string>();
-                actionList.Add(action);
-            };
+                void Warn(string message)
+                {
+                    if (suppressWarnings) return;
 
-            string[] array = allText.Split('\n');
-            for (int currentline = 0; currentline < array.Length; currentline++)
-            {
-                array[currentline] = array[currentline].TrimStart();
+                    Logger.Log(message, LogType.Warning, script.ScriptName, currentline + 1);
+                }
+
+                void Debug(string message)
+                {
+                    if (!script.Debug) return;
+                    Logger.Log(message, LogType.Debug, script.ScriptName, currentline + 1);
+                }
+
+                string line = lines[currentline].TrimStart();
 
                 // NoAction
-                string action = array[currentline];
-                if (string.IsNullOrWhiteSpace(action))
+                if (string.IsNullOrWhiteSpace(line))
                 {
-                    addActionNoArgs(new NullAction("BLANK LINE"));
+                    actionList.Add(new NullAction("BLANK LINE"));
                     continue;
                 }
-                else if (action.StartsWith("##"))
+                else if (line.StartsWith("##"))
                 {
                     inMultilineComment = !inMultilineComment;
-                    addActionNoArgs(new NullAction("COMMENT"));
+                    actionList.Add(new NullAction("BLOCK COMMENT"));
                     continue;
                 }
-                else if (action.StartsWith("#") || inMultilineComment)
+                else if (line.StartsWith("#") || inMultilineComment)
                 {
-                    addActionNoArgs(new NullAction("COMMENT"));
+                    actionList.Add(new NullAction("COMMENT"));
                     continue;
                 }
-                else if (action.StartsWith("!--"))
+                else if (line.StartsWith("!--"))
                 {
-                    string flag = action.Replace("!--", string.Empty).Trim();
+                    string[] flagContent = line
+                        .Replace("!--", string.Empty)
+                        .Trim()
+                        .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                    if (!script.HasFlag(flag))
+                    if (flagContent.Length == 0)
                     {
-                        string[] arguments = flag.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                        Flag fl = new(arguments[0], arguments.Skip(1));
+                        Warn($"Provided flag definition '{line}' contains no information about the flag.");
+                        continue;
+                    }
+
+                    string flagName = flagContent[0];
+
+                    if (!script.HasFlag(flagName))
+                    {
+                        Flag fl = new(flagName, flagContent.Skip(1));
                         script.Flags.Add(fl);
                     }
-                    else if (!suppressWarnings)
+                    else
                     {
-                        Logger.Warn(ErrorGen.Get(ErrorCode.MultipleFlagDefs, flag, scriptName));
+                        Warn(ErrorGen.Get(ErrorCode.MultipleFlagDefs, flagContent, scriptName));
                     }
 
-                    addActionNoArgs(new NullAction("FLAG DEFINE"));
+                    actionList.Add(new NullAction("FLAG DEFINE"));
                     continue;
                 }
 
                 List<string> actionParts = ListPool<string>.Pool.Get();
 
-                foreach (string str in action.Split(' '))
+                foreach (string str in line.Split(' '))
                 {
                     if (string.IsNullOrWhiteSpace(str))
                         continue;
@@ -296,14 +312,18 @@ namespace ScriptedEvents.API.Modules
                 // Std labels
                 if (keyword.EndsWith(":"))
                 {
-                    string labelName = action.Remove(keyword.Length - 1, 1).RemoveWhitespace();
+                    string labelName = line.Remove(keyword.Length - 1, 1).RemoveWhitespace();
 
                     if (!script.Labels.ContainsKey(labelName))
+                    {
                         script.Labels.Add(labelName, currentline);
-                    else if (!suppressWarnings)
-                        Logger.Warn(ErrorGen.Get(ErrorCode.MultipleLabelDefs, labelName, scriptName));
+                    }
+                    else
+                    {
+                        Warn(ErrorGen.Get(ErrorCode.MultipleLabelDefs, labelName, scriptName));
+                    }
 
-                    addActionNoArgs(new NullAction($"{labelName} LABEL"));
+                    actionList.Add(new NullAction($"{labelName} LABEL"));
                     continue;
                 }
 
@@ -312,18 +332,22 @@ namespace ScriptedEvents.API.Modules
                 {
                     if (actionParts.Count < 2)
                     {
-                        Logger.Error($"A function label syntax has been used, but no name has been provided.", script);
+                        Warn($"A function label syntax has been used, but no name has been provided.");
                         continue;
                     }
 
                     string labelName = actionParts[1].RemoveWhitespace();
 
                     if (!script.FunctionLabels.ContainsKey(labelName))
+                    {
                         script.FunctionLabels.Add(labelName, currentline);
-                    else if (!suppressWarnings)
-                        Logger.Warn(ErrorGen.Get(ErrorCode.MultipleLabelDefs, labelName, scriptName));
+                    }
+                    else
+                    {
+                        Warn(ErrorGen.Get(ErrorCode.MultipleLabelDefs, labelName, scriptName));
+                    }
 
-                    addActionNoArgs(new StartFunctionAction());
+                    actionList.Add(new StartFunctionAction());
                     continue;
                 }
 
@@ -343,32 +367,73 @@ namespace ScriptedEvents.API.Modules
                         continue;
                     }
 
-                    if (!suppressWarnings)
-                        Logger.Warn(ErrorGen.Get(ErrorCode.InvalidAction, keyword.RemoveWhitespace(), scriptName), script);
+                    Warn(ErrorGen.Get(ErrorCode.InvalidAction, keyword.RemoveWhitespace(), scriptName));
 
-                    addActionNoArgs(new NullAction("ERROR"));
+                    actionList.Add(new NullAction("ERROR"));
                     continue;
                 }
 
                 IAction newAction = Activator.CreateInstance(actionType) as IAction;
-                script.OriginalActionArgs[newAction] = actionParts.Skip(1).Select(str => str.RemoveWhitespace()).ToArray();
 
-                Logger.Debug($"Queuing action {keyword}, {string.Join(", ", script.OriginalActionArgs[newAction])}", script);
+                string[] providedActionArgs = actionParts.Skip(1).Select(str => str.RemoveWhitespace()).ToArray();
+                script.OriginalActionArgs[newAction] = providedActionArgs;
+
+                List<(ParamType Type, string Value)> actionArguments = ListPool<(ParamType Type, string Value)>.Pool.Get();
+
+                foreach (string argName in providedActionArgs)
+                {
+                    void AddConst()
+                    {
+                        Debug($"Argument '{argName}' will not be processed when running the action. Argument cannot change value.");
+                        actionArguments.Add((ParamType.ConstParam, argName));
+                    }
+
+                    void AddVar()
+                    {
+                        Debug($"Argument '{argName}' must be processed when running the action. Argument is a variable.");
+                        actionArguments.Add((ParamType.VarParam, argName));
+                    }
+
+                    if (argName.Length < 3)
+                    {
+                        AddConst();
+                        continue;
+                    }
+
+                    bool openingBracketPresent = argName.First() == '{';
+                    bool closingBracketPresent = argName.Last() == '}';
+
+                    if (openingBracketPresent && closingBracketPresent)
+                    {
+                        AddVar();
+                    }
+                    else
+                    {
+                        AddConst();
+                    }
+
+                    continue;
+                }
+
+                Debug($"Read action '{keyword}' with params: {string.Join(", ", script.OriginalActionArgs[newAction])}");
 
                 // Obsolete check
                 if (newAction.IsObsolete(out string obsoleteReason) && !suppressWarnings && !script.SuppressWarnings)
                 {
-                    Logger.Warn($"Action {newAction.Name} is obsolete; {obsoleteReason}", script);
+                    Warn($"Action {newAction.Name} is obsolete; {obsoleteReason}");
                 }
 
                 actionList.Add(newAction);
                 ListPool<string>.Pool.Return(actionParts);
+                ListPool<(ParamType Type, string Value)>.Pool.Return(actionArguments);
             }
 
             string scriptPath = GetFilePath(scriptName);
 
+            Dictionary<string, string> perms = MainPlugin.Singleton.Config.RequiredPermissions;
+
             // Fill out script data
-            if (MainPlugin.Singleton.Config.RequiredPermissions is not null && MainPlugin.Singleton.Config.RequiredPermissions.TryGetValue(scriptName, out string perm2) == true)
+            if (perms is not null && perms.TryGetValue(scriptName, out string perm2))
             {
                 script.ReadPermission += $".{perm2}";
                 script.ExecutePermission += $".{perm2}";
@@ -498,7 +563,9 @@ namespace ScriptedEvents.API.Modules
             {
                 Player match = Player.Get(input);
                 if (match is not null)
+                    {
                     list.Add(match);
+                }
             }
 
             // Shuffle, Remove unconnected/overwatch, limit
@@ -507,7 +574,9 @@ namespace ScriptedEvents.API.Modules
             /* list.RemoveAll(p => !p.IsConnected); */
 
             if (MainPlugin.Configs.IgnoreOverwatch)
+                {
                 list.RemoveAll(p => p.Role.Type is RoleTypeId.Overwatch);
+            }
 
             if (amount.HasValue && amount.Value > 0 && list.Count > 0)
             {
