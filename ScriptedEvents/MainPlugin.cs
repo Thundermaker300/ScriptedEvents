@@ -90,6 +90,8 @@
 
         public static EventHandlingModule Handlers => GetModule<EventHandlingModule>();
 
+        public Dictionary<string, Script> CachedScripts = new();
+
         /// <summary>
         /// Equivalent to <see cref="Logger.Info(string)"/>, but checks the EnableLogs ScriptedEvents config first.
         /// </summary>
