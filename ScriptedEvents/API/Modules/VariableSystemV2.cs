@@ -361,7 +361,7 @@
         /// <returns>The variables used within the string.</returns>
         public static string[] IsolateVariables(string input, Script source)
         {
-            source?.DebugLog($"Isolating variables from: {input}");
+            source.DebugLog($"Isolating variables from: {input}");
             List<string> result = ListPool<string>.Pool.Get();
 
             for (int i = 0; i < input.Length; i++)
@@ -371,11 +371,11 @@
                 {
                     int index = input.IndexOf('}', i);
 
-                    source?.DebugLog($"Detected variable opening symbol, char {i}. Closing index {index}. Substring {index - i + 1}.");
+                    source.DebugLog($"Detected variable opening symbol, char {i}. Closing index {index}. Substring {index - i + 1}.");
 
                     string variable = input.Substring(i, index - i + 1);
 
-                    source?.DebugLog($"Variable: {variable}");
+                    source.DebugLog($"Variable: {variable}");
 
                     result.Add(variable);
                 }
