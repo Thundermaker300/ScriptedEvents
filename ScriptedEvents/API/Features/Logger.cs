@@ -1,7 +1,9 @@
 ﻿namespace ScriptedEvents.API.Features
 {
-    using CommandSystem;
+    using System;
 
+    using CommandSystem;
+    using Discord;
     using Exiled.API.Features;
 
     using ScriptedEvents.API.Enums;
@@ -34,6 +36,30 @@
                         script.DebugLog(message);
                     else
                         LogInternal.Debug(message);
+                    break;
+            }
+        }
+
+        public static void Log(string message, LogType logType, string scriptName, int line)
+        {
+            if (MainPlugin.Configs.DisableAllLogs)
+                return;
+
+            message = $"[Script: {scriptName}] [L: {line + 1}] {message}";
+
+            switch (logType)
+            {
+                case LogType.Error:
+                    LogInternal.Error(message);
+                    break;
+                case LogType.Warning:
+                    LogInternal.Warn(message);
+                    break;
+                case LogType.Info:
+                    LogInternal.Info(message);
+                    break;
+                case LogType.Debug:
+                    LogInternal.Send($"[{MainPlugin.Singleton.Name}] {message}", LogLevel.Debug, ConsoleColor.Green);
                     break;
             }
         }
