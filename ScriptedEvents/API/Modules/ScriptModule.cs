@@ -352,6 +352,7 @@ namespace ScriptedEvents.API.Modules
                 }
 
                 keyword = keyword.ToUpper();
+                string[] providedActionArgs = actionParts.Skip(1).Select(str => str.RemoveWhitespace()).ToArray();
 
                 if (!TryGetActionType(keyword, out Type actionType))
                 {
@@ -360,7 +361,7 @@ namespace ScriptedEvents.API.Modules
                     {
                         CustomAction customAction1 = new(customAction.Name, customAction.Action)
                         {
-                            Arguments = actionParts.Skip(1).Select(str => str.RemoveWhitespace()).ToArray(),
+                            Arguments = providedActionArgs,
                         };
                         actionList.Add(customAction1);
                         ListPool<string>.Pool.Return(actionParts);
@@ -375,7 +376,6 @@ namespace ScriptedEvents.API.Modules
 
                 IAction newAction = Activator.CreateInstance(actionType) as IAction;
 
-                string[] providedActionArgs = actionParts.Skip(1).Select(str => str.RemoveWhitespace()).ToArray();
                 script.OriginalActionArgs[newAction] = providedActionArgs;
 
                 List<(ParamType Type, string Value)> actionArguments = ListPool<(ParamType Type, string Value)>.Pool.Get();
