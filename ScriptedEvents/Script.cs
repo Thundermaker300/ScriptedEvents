@@ -10,15 +10,16 @@
     using Exiled.API.Features;
     using Exiled.API.Features.Pools;
     using ScriptedEvents.API.Enums;
-    using ScriptedEvents.API.Features;
     using ScriptedEvents.API.Interfaces;
     using ScriptedEvents.Structures;
     using ScriptedEvents.Variables;
 
+    using Logger = ScriptedEvents.API.Features.Logger;
+
     /// <summary>
     /// Represents a script.
     /// </summary>
-    public class Script : IDisposable
+    public class Script : IDisposable, ICloneable
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="Script"/> class.
@@ -28,7 +29,7 @@
         {
             Labels = DictionaryPool<string, int>.Pool.Get();
             FunctionLabels = DictionaryPool<string, int>.Pool.Get();
-            Flags = ListPool<Flag>.Pool.Get();
+            Flags = Array.Empty<Flag>();
             UniqueVariables = DictionaryPool<string, CustomVariable>.Pool.Get();
             UniquePlayerVariables = DictionaryPool<string, CustomPlayerVariable>.Pool.Get();
             UniqueId = Guid.NewGuid();
@@ -52,7 +53,7 @@
         /// <summary>
         /// Gets or sets the name of the script.
         /// </summary>
-        public string ScriptName { get; set; } = string.Empty;
+        public string ScriptName { get; set; } = "none";
 
         /// <summary>
         /// Gets or sets the permission required to read the script.
@@ -122,7 +123,7 @@
         /// <summary>
         /// Gets a list of flags on the script.
         /// </summary>
-        public List<Flag> Flags { get; }
+        public Flag[] Flags { get; }
 
         /// <summary>
         /// Gets a value indicating whether or not the script is enabled.
@@ -155,14 +156,14 @@
         public ICommandSender Sender { get; internal set; }
 
         /// <summary>
-        /// Gets or sets all line positions from where a JUMP action was executed.
+        /// Gets or sets all line positions from where GOTO called a function.
         /// </summary>
         public List<int> FunctionLabelHistory { get; set; } = new();
 
         /// <summary>
         /// Gets the original script which ran this script using the CALL action.
         /// </summary>
-        public Script CallerScript { get; internal set; }
+        public Script CallerScript { get; internal set; } = null;
 
         /// <summary>
         /// Gets or sets a value indicating whether an IF statement is blocking the execution of actions.
@@ -182,7 +183,7 @@
         /// <summary>
         /// Gets a <see cref="List{T}"/> of coroutines run by this script.
         /// </summary>
-        public List<CoroutineData> Coroutines { get; } = new();
+        public List<CoroutineData> Coroutines { get; internal set; } = new();
 
         /// <summary>
         /// Gets or sets the info about an ongoing player loop.
@@ -190,30 +191,76 @@
         public PlayerLoopInfo PlayerLoopInfo { get; set; } = null;
 
         /// <summary>
-        /// Gets or sets the original action arguments from when the script was read for the first time.
-        /// </summary>
-        public Dictionary<IAction, string[]> OriginalActionArgs { get; set; } = new();
-
-        /// <summary>
         /// Gets or sets an array of arguments and their types for a specific action.
         /// </summary>
         public Dictionary<IAction, (ParamType Type, string Value)[]> OriginalActionArgsWithTypes { get; set; } = new();
 
+        public bool IsDisposed { get; internal set; } = false;
+
+        public bool IsOrigin { get; set; } = false;
+
         /// <inheritdoc/>
         public void Dispose()
         {
+            return;
+
+            if (IsOrigin)
+            {
+                Logger.Error("tried to dispose an origin script");
+                return;
+            }
+
             Logger.Debug($"Disposing script object | ID: {UniqueId}");
 
             Sender = null;
             Actions = null;
             RawText = null;
             FilePath = null;
+            IsDisposed = true;
 
             DictionaryPool<string, int>.Pool.Return(Labels);
-            ListPool<Flag>.Pool.Return(Flags);
             DictionaryPool<string, CustomVariable>.Pool.Return(UniqueVariables);
             DictionaryPool<string, CustomPlayerVariable>.Pool.Return(UniquePlayerVariables);
             GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Copies a script object.
+        /// </summary>
+        /// <returns>The copied script.</returns>
+        public object Clone()
+        {
+            Script copy = (Script)MemberwiseClone();
+
+            // Deep copy dictionaries
+            copy.OriginalActionArgsWithTypes = new(OriginalActionArgsWithTypes.Count, OriginalActionArgsWithTypes.Comparer);
+
+            foreach (var kvp in this.OriginalActionArgsWithTypes)
+            {
+                // Assuming IAction objects can be shared, otherwise you need to clone them too
+                var keyCopy = kvp.Key;
+
+                // Copy the array of (ParamType, string) tuples
+                var valueArrayCopy = new (ParamType Type, string Value)[kvp.Value.Length];
+                for (int i = 0; i < kvp.Value.Length; i++)
+                {
+                    valueArrayCopy[i] = (kvp.Value[i].Type, kvp.Value[i].Value);
+                }
+
+                copy.OriginalActionArgsWithTypes[keyCopy] = valueArrayCopy;
+            }
+
+            copy.UniquePlayerVariables = DeepCopyDict(UniquePlayerVariables);
+            copy.UniqueVariables = DeepCopyDict(UniqueVariables);
+            copy.FunctionLabels = DeepCopyDict(FunctionLabels);
+
+            copy.IsOrigin = false;
+
+            // new lists to have a different pointer
+            copy.Coroutines = new List<CoroutineData>();
+            copy.FunctionLabelHistory = new List<int>();
+
+            return copy;
         }
 
         /// <summary>
@@ -320,6 +367,17 @@
             => HasFlag(key, out _);
 
         public void AddFlag(string key, IEnumerable<string> arguments = null)
-            => Flags.Add(new(key, arguments));
+            => Flags.Append(new(key, arguments));
+
+        private static Dictionary<TKey, TValue> DeepCopyDict<TKey, TValue>(Dictionary<TKey, TValue> original)
+        {
+            Dictionary<TKey, TValue> ret = new(original.Count, original.Comparer);
+            foreach (KeyValuePair<TKey, TValue> entry in original)
+            {
+                ret.Add(entry.Key, entry.Value);
+            }
+
+            return ret;
+        }
     }
 }

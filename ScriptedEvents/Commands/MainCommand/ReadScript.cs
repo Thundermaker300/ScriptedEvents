@@ -6,7 +6,6 @@
 
     using CommandSystem;
 
-    using Exiled.API.Features;
     using Exiled.API.Features.Pools;
     using Exiled.Permissions.Extensions;
     using ScriptedEvents.API.Enums;
@@ -67,7 +66,7 @@
                 StringBuilder sb = StringBuilderPool.Pool.Get();
                 sb.AppendLine($"Reading file {arg0}...");
                 sb.AppendLine($"Script Name: {scr.ScriptName}");
-                sb.AppendLine($"Script Flags: {(scr.Flags.Count > 0 ? string.Join(", ", scr.Flags) : "None")}");
+                sb.AppendLine($"Script Flags: {(scr.Flags.Length > 0 ? string.Join(", ", scr.Flags) : "None")}");
                 sb.AppendLine($"Last Ran: {scr.LastRead:f}");
                 sb.AppendLine($"Last Edited: {scr.LastEdited:f}");
                 sb.AppendLine($"Script Path: {scr.FilePath}");

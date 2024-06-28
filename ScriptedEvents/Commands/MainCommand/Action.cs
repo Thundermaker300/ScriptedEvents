@@ -8,7 +8,6 @@
     using Exiled.Permissions.Extensions;
     using RemoteAdmin;
     using ScriptedEvents.API.Enums;
-    using ScriptedEvents.API.Features;
     using ScriptedEvents.API.Interfaces;
 
     [CommandHandler(typeof(RemoteAdminCommandHandler))]
@@ -72,7 +71,7 @@
                 Actions = new[] { scriptAction },
             };
 
-            mockScript.OriginalActionArgs[action] = scriptAction.RawArguments;
+            // mockScript.OriginalActionArgsWithTypes[action] = scriptAction.RawArguments;
             if (sender is PlayerCommandSender playerSender && Player.TryGet(playerSender, out Player plr))
             {
                 mockScript.AddPlayerVariable("{SENDER}", "The player who executed the script.", new[] { plr });

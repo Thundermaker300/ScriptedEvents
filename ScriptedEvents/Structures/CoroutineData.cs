@@ -11,16 +11,6 @@
         /// <summary>
         /// Initializes a new instance of the <see cref="CoroutineData"/> class.
         /// </summary>
-        /// <param name="tag">The coroutine tag.</param>
-        public CoroutineData(string tag)
-        {
-            Key = tag;
-            Handle = null;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CoroutineData"/> class.
-        /// </summary>
         /// <param name="handle">The <see cref="CoroutineHandle"/>.</param>
         public CoroutineData(CoroutineHandle handle)
         {

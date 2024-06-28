@@ -139,6 +139,148 @@
         }
 
         /// <summary>
+        /// Processes arguments.
+        /// </summary>
+        /// <param name="expectedArguments">The expected arguments.</param>
+        /// <param name="args">The provided arguments.</param>
+        /// <param name="component">The action or variable performing the process.</param>
+        /// <param name="source">The script source.</param>
+        /// <param name="requireBrackets">If brackets are required to convert variables.</param>
+        /// <returns>The result of the process.</returns>
+        public static ArgumentProcessResult Process(Argument[] expectedArguments, (ParamType Type, string Value)[] args, IScriptComponent component, Script source, bool requireBrackets = true)
+        {
+            void Debug(string message)
+            {
+                Logger.Debug("[ARGPROC] " + message, source);
+            }
+
+            if (args is null)
+            {
+                Debug("There are no raw arguments provided for this action. Ending processing.");
+                return new(true);
+            }
+
+            string[] strippedArgs = Array.Empty<string>();
+
+            if (args.Length != 0)
+            {
+                Debug($"Arguments to process: {string.Join(", ", args)}");
+
+                ArgumentProcessResult processedForLoop = HandlePlayerListComprehension(args.Select(kvp => kvp.Value).ToArray(), source, out string[] x);
+                strippedArgs = x;
+
+                if (!processedForLoop.Success)
+                {
+                    Debug("[$FOR] '$FOR' action decorator parsing failed. Ending processing.");
+                    return processedForLoop;
+                }
+                else
+                {
+                    Debug("[$FOR] '$FOR' processing did not result in error. Continuing processing.");
+                }
+
+                int conditionSectionKeyword = strippedArgs.IndexOf("$IF");
+                if (conditionSectionKeyword != -1)
+                {
+                    string ifCondition = string.Join(",", strippedArgs.Take(conditionSectionKeyword).ToArray());
+
+                    strippedArgs = strippedArgs.Skip(conditionSectionKeyword + 1).ToArray();
+
+                    Debug($"[$IF] Evaluating condition: {ifCondition}");
+                    ConditionResponse resp = ConditionHelperV2.Evaluate(string.Join(" ", ifCondition), source);
+
+                    if (!resp.Success)
+                    {
+                        Debug("[$IF @ ARGPROC] Evaluation resulted in an error. Ending processing.");
+                        return new(false, true, string.Empty, resp.Message);
+                    }
+
+                    if (!resp.Passed)
+                    {
+                        Debug("[$IF @ ARGPROC] Evaluation resulted in FALSE. Action shall not execute. Ending processing.");
+                        return new(false);
+                    }
+                    else
+                    {
+                        Debug($"[$IF @ ARGPROC] Evaluation resulted in TRUE. Action shall execute like normal. Continuing parsing.");
+                    }
+                }
+                else
+                {
+                    Debug($"[$IF @ ARGPROC] No '$IF' syntax was found. Continuing parsing.");
+                }
+            }
+            else
+            {
+                strippedArgs = Array.Empty<string>();
+            }
+
+            if (expectedArguments is null || expectedArguments.Length == 0)
+            {
+                Debug("[ARGPROC] There are no arguments for this action. Ending parsing.");
+                return new(true);
+            }
+
+            int required = expectedArguments.Count(arg => arg.Required);
+
+            if (strippedArgs.Length < required)
+            {
+                IEnumerable<string> args2 = expectedArguments.Select(arg => $"{(arg.Required ? "<" : "[")}{arg.ArgumentName}{(arg.Required ? ">" : "]")}");
+                return new(false, true, string.Empty, ErrorGen.Get(ErrorCode.MissingArguments, component.Name, component is IAction ? "action" : "variable", required, string.Join(", ", args2)));
+            }
+
+            ArgumentProcessResult success = new(true);
+            success.StrippedRawParameters = strippedArgs;
+
+            for (int i = 0; i < expectedArguments.Length; i++)
+            {
+                (ParamType Type, string Value) argInfo = args[i];
+                /*
+                TODO: Add a system where ConstParam has ProcessIndividualParameter called when the script is cached
+                and we dont need to process it when the action is ran
+                if (argInfo.Type is ParamType.ConstParam)
+                {
+                    success.NewParameters.AddRange(new[] { (object)argInfo.Value });
+                    continue;
+                }
+                */
+
+                if (args.Length <= i)
+                    break;
+
+                ArgumentProcessResult res = ProcessIndividualParameter(
+                    expectedArguments[i],
+                    argInfo.Value,
+                    component,
+                    source,
+                    requireBrackets);
+
+                if (!res.Success) return res; // Throw issue to end-user
+
+                success.NewParameters.AddRange(res.NewParameters);
+            }
+
+            // If the raw argument list is larger than the expected list, do not process any extra arguments
+            // Edge-cases with long strings being the last parameter
+            if (strippedArgs.Length > expectedArguments.Length)
+            {
+                // TODO: Figure out a method where ReplaceVariables isn't called for each extra argument.
+                // While also allowing variables + strings to be combined
+                // Eg. Using 'ReplaceVariable' instead won't turn '{PLAYERS}test' into '0test' like expected.
+                // This works for now, we need version 3.0 :|
+                IEnumerable<string> extraArgs = strippedArgs.Skip(expectedArguments.Length);
+                foreach (string arg in extraArgs)
+                {
+                    success.NewParameters.Add(VariableSystemV2.ReplaceVariables(arg, source));
+                }
+            }
+
+            success.NewParameters.RemoveAll(o => o is string st && string.IsNullOrWhiteSpace(st));
+
+            return success;
+        }
+
+        /// <summary>
         /// Processes an individual argument.
         /// </summary>
         /// <param name="expected">The expected argument.</param>
@@ -160,7 +302,7 @@
                     return new(false, true, expected.ArgumentName, ErrorGen.Get(ErrorCode.ParameterError_Option, input, expected.ArgumentName, action.Name, string.Join(", ", options.Options.Select(x => x.Name))));
 
                 success.NewParameters.Add(input);
-                source?.DebugLog($"[OPTION ARG] [C: {action.Name}] Param {expected.ArgumentName} now has a processed value '{success.NewParameters.Last()}' and raw value '{input}'");
+                source?.DebugLog($"[OPTION ARG] [C: {action.Name}] Argument {expected.ArgumentName} now has value '{input}'.");
                 return success;
             }
 
@@ -303,7 +445,7 @@
 
             if (loopSyntaxIndex == -1)
             {
-                Logger.Debug("$FOR: no syntax found.", source);
+                Logger.Debug("[$FOR: no syntax found.", source);
                 return new(true);
             }
 

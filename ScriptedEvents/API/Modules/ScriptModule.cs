@@ -59,6 +59,11 @@ namespace ScriptedEvents.API.Modules
 
         public List<string> AutoRunScripts { get; set; }
 
+        /// <summary>
+        /// A dictionary of cached scripts, key being script name and value being the script object. THE OBJECT NEEDS TO BE COPIED BEFORE USE.
+        /// </summary>
+        public static Dictionary<string, Script> CachedScripts = new();
+
         /// <inheritdoc/>
         public override string Name { get; } = "ScriptModule";
 
@@ -92,7 +97,6 @@ namespace ScriptedEvents.API.Modules
             }
 
             // Welcome message :)
-            // 3s delay to show after other console spam
             Timing.CallDelayed(6f, () =>
             {
                 Logger.Warn($"Thank you for installing Scripted Events! View the README file located at {Path.Combine(MainPlugin.BaseFilePath, "README.txt")} for information on how to use and get the most out of this plugin.");
@@ -223,19 +227,33 @@ namespace ScriptedEvents.API.Modules
         /// <param name="scriptName">The name of the script.</param>
         /// <param name="executor">The CommandSender that ran the script. Can be null.</param>
         /// <param name="suppressWarnings">Do not show warnings in the console.</param>
+        /// <param name="overwriteCached">Should the script be overwritten if it was already cached.</param>
         /// <returns>The <see cref="Script"/> fully filled out, if the script was found.</returns>
         /// <exception cref="FileNotFoundException">Thrown if the script is not found.</exception>
-        public Script ReadScript(string scriptName, ICommandSender executor, bool suppressWarnings = false)
+        public Script ReadScript(string scriptName, ICommandSender executor, bool suppressWarnings = false, bool overwriteCached = false)
         {
+            if (CachedScripts is not null && CachedScripts.TryGetValue(scriptName, out Script scr) && !overwriteCached)
+            {
+                Logger.Error($"{scriptName} has been returned as cached copy");
+                return (Script)scr.Clone();
+            }
+            else
+            {
+                Logger.Error($"{scriptName} is going to be read for the first time");
+            }
+
+            Logger.Error("x");
             string allText = ReadScriptText(scriptName);
             bool inMultilineComment = false;
             Script script = new();
+            script.IsOrigin = true;
 
             List<IAction> actionList = ListPool<IAction>.Pool.Get();
-
+            Logger.Error("x2");
             string[] lines = allText.Split('\n');
             for (int currentline = 0; currentline < lines.Length; currentline++)
             {
+                Logger.Error("x3");
                 void Warn(string message)
                 {
                     if (suppressWarnings) return;
@@ -245,7 +263,7 @@ namespace ScriptedEvents.API.Modules
 
                 void Debug(string message)
                 {
-                    if (!script.Debug) return;
+                    //if (!script.Debug) return;
                     Logger.Log(message, LogType.Debug, script.ScriptName, currentline + 1);
                 }
 
@@ -286,7 +304,7 @@ namespace ScriptedEvents.API.Modules
                     if (!script.HasFlag(flagName))
                     {
                         Flag fl = new(flagName, flagContent.Skip(1));
-                        script.Flags.Add(fl);
+                        script.Flags.Append(fl);
                     }
                     else
                     {
@@ -376,22 +394,23 @@ namespace ScriptedEvents.API.Modules
 
                 IAction newAction = Activator.CreateInstance(actionType) as IAction;
 
-                script.OriginalActionArgs[newAction] = providedActionArgs;
+                (ParamType Type, string Value)[] actionArguments = Array.Empty<(ParamType Type, string Value)>();
 
-                List<(ParamType Type, string Value)> actionArguments = ListPool<(ParamType Type, string Value)>.Pool.Get();
-
+                Logger.Error("x4");
                 foreach (string argName in providedActionArgs)
                 {
+                    Debug($"Current params: {string.Join(", ", actionArguments)}");
+
                     void AddConst()
                     {
                         Debug($"Argument '{argName}' will not be processed when running the action. Argument cannot change value.");
-                        actionArguments.Add((ParamType.ConstParam, argName));
+                        actionArguments = actionArguments.Append((ParamType.ConstParam, argName)).ToArray();
                     }
 
                     void AddVar()
                     {
                         Debug($"Argument '{argName}' must be processed when running the action. Argument is a variable.");
-                        actionArguments.Add((ParamType.VarParam, argName));
+                        actionArguments = actionArguments.Append((ParamType.VarParam, argName)).ToArray();
                     }
 
                     if (argName.Length < 3)
@@ -415,7 +434,8 @@ namespace ScriptedEvents.API.Modules
                     continue;
                 }
 
-                Debug($"Read action '{keyword}' with params: {string.Join(", ", script.OriginalActionArgs[newAction])}");
+                script.OriginalActionArgsWithTypes[newAction] = actionArguments;
+                Debug($"Read action '{keyword}' with params: {string.Join(", ", script.OriginalActionArgsWithTypes[newAction].Select(kvp => kvp.Value))}");
 
                 // Obsolete check
                 if (newAction.IsObsolete(out string obsoleteReason) && !suppressWarnings && !script.SuppressWarnings)
@@ -425,7 +445,6 @@ namespace ScriptedEvents.API.Modules
 
                 actionList.Add(newAction);
                 ListPool<string>.Pool.Return(actionParts);
-                ListPool<(ParamType Type, string Value)>.Pool.Return(actionArguments);
             }
 
             string scriptPath = GetFilePath(scriptName);
@@ -463,6 +482,7 @@ namespace ScriptedEvents.API.Modules
 
             script.DebugLog($"Debug script read successfully. Name: {script.ScriptName} | Actions: {script.Actions.Count(act => act is not NullAction)} | Flags: {string.Join(" ", script.Flags)} | Labels: {string.Join(" ", script.Labels)} | Comments: {script.Actions.Count(action => action is NullAction @null && @null.Type is "COMMENT")}");
 
+            CachedScripts.Add(scriptName, script);
             return script;
         }
 
@@ -832,6 +852,7 @@ namespace ScriptedEvents.API.Modules
         /// <returns>Coroutine iterator.</returns>
         private IEnumerator<float> RunScriptInternal(Script scr, bool dispose = true)
         {
+            Logger.Error("hell");
             MainPlugin.Info($"Started running the '{scr.ScriptName}' script.");
 
             yield return Timing.WaitForOneFrame;
@@ -843,8 +864,19 @@ namespace ScriptedEvents.API.Modules
             int lines = 0;
             int successfulLines = 0;
 
+            if (scr.Actions is null)
+            {
+                Logger.Error($"actions is null");
+            }
+            else
+            {
+                Logger.Error($"actions is NOT null");
+            }
+
+            Logger.Error($"hell + {scr.Actions.Length}");
             for (; scr.CurrentLine < scr.Actions.Length; scr.NextLine())
             {
+                Logger.Error("hell + o?");
                 Logger.Debug("-----------", scr);
                 Logger.Debug($"Current Line: {scr.CurrentLine + 1}", scr);
                 if (!scr.Actions.TryGet(scr.CurrentLine, out IAction action) || action == null)
@@ -867,8 +899,10 @@ namespace ScriptedEvents.API.Modules
                 float? delay = null;
 
                 // Process Arguments
-                if (scr.OriginalActionArgs.TryGetValue(action, out string[] originalArgs))
+
+                if (scr.OriginalActionArgsWithTypes.TryGetValue(action, out (ParamType, string)[] originalArgs))
                 {
+                    Logger.Error("were in");
                     ArgumentProcessResult res = ArgumentProcessor.Process(action.ExpectedArguments, originalArgs, action, scr);
                     if (res.Errored)
                     {
@@ -894,6 +928,10 @@ namespace ScriptedEvents.API.Modules
 
                     action.Arguments = res.NewParameters.ToArray();
                     action.RawArguments = res.StrippedRawParameters;
+                }
+                else
+                {
+                    Logger.Warn("not valid for org act ags");
                 }
 
                 try

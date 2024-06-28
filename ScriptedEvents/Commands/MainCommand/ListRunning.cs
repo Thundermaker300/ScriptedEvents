@@ -66,7 +66,7 @@
                     {
                         if (item.IsKilled || !item.IsRunning) continue;
                         i++;
-                        corobldr.AppendLine($"[{i}] TYPE: {data.Key} \\\\ TAG: {item.Key ?? "N/A"} \\\\ SOURCE: {item.Source?.ScriptName ?? "N/A"}");
+                        corobldr.AppendLine($"[{i}] TYPE: {data.Key} \\\\ TAG: {item.Key ?? "N/A"}");
                     }
                 }
 

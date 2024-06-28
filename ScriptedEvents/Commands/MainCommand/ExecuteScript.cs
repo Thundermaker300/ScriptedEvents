@@ -9,7 +9,7 @@
     using Exiled.API.Features;
     using Exiled.Permissions.Extensions;
     using RemoteAdmin;
-
+    using ScriptedEvents.API.Features;
     using ScriptedEvents.API.Features.Exceptions;
     using ScriptedEvents.API.Modules;
 
@@ -52,6 +52,15 @@
             try
             {
                 scr = MainPlugin.ScriptModule.ReadScript(arg0, sender);
+
+                if (scr is null)
+                {
+                    Logger.Error("scr was none");
+                }
+                else
+                {
+                    Logger.Error("scr was NOT none");
+                }
 
                 if (!sender.CheckPermission(scr.ExecutePermission))
                 {
